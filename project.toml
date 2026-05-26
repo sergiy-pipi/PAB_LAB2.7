@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shared_expense_tracker"
+version = "1.0.0"
+authors = [
+    { name = "Сергій Федорук", email = "student@vntu.edu.ua" }
+]
+description = "Консольний застосунок-аналог Splitwise для трекінгу спільних витрат у групі з автоматичним підрахунком взаєморозрахунків"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
