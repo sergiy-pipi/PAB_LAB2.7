@@ -16,6 +16,7 @@ class Currency(Enum):
     USD = "USD"
     EUR = "EUR"
 
+
 # ==========================================
 # 2. МОДЕЛЮВАННЯ ДАНИХ (dataclasses) & JSON
 # ==========================================
@@ -29,6 +30,7 @@ class User:
     
     def __repr__(self):
         return f"User(username='{self.username}', email='{self.email}')"
+
 
 @dataclass
 class AppConfig:
@@ -47,6 +49,7 @@ class AppConfig:
                 data = json.load(f)
                 self.theme = data.get("theme", "dark")
                 self.items_per_page = data.get("items_per_page", 5)
+
 
 # ==========================================
 # 3. ІНКАПСУЛЯЦІЯ, ВАЛІДАЦІЯ ТА МАГІЧНІ МЕТОДИ
@@ -95,6 +98,7 @@ class ExpenseRecord:
     def __repr__(self):
         return f"ExpenseRecord(desc='{self.description}', amount={self.total_amount}, paid_by='{self.paid_by}')"
 
+
 # ==========================================
 # 4. ІЄРАРХІЯ КЛАСІВ (Наслідування та Поліморфізм)
 # ==========================================
@@ -105,6 +109,7 @@ class EqualSplit(ExpenseRecord):
             return {}
         share = round(self.total_amount / len(self.users), 2)
         return {user: share for user in self.users}
+
 
 class PercentageSplit(ExpenseRecord):
     def __init__(self, description: str, total_amount: float, paid_by: str, currency: Currency, 
@@ -119,6 +124,7 @@ class PercentageSplit(ExpenseRecord):
             pct = self.percentages.get(user, 0.0)
             splits[user] = round((pct / 100.0) * self.total_amount, 2)
         return splits
+
 
 # ==========================================
 # 5. ІТЕРАТОРИ ТА ГЕНЕРАТОРИ
@@ -138,6 +144,7 @@ class ActiveExpenseIterator:
             self._index += 1
             return result
         raise StopIteration
+
 
 # ==========================================
 # 6. МЕНЕДЖЕР КОНТЕКСТУ (Транзакційне редагування)
@@ -168,6 +175,7 @@ class ExpenseTransaction:
         else:
             print("\n [Транзакція успішна] Зміни до запису успішно застосовано та збережено.")
             return False
+
 
 # ==========================================
 # 7. КОМПОЗИЦІЯ / АГРЕГАЦІЯ (Клас-Менеджер)
@@ -204,14 +212,18 @@ class GroupLedger:
     def get_balances(self) -> Dict[str, float]:
         balances = {username: 0.0 for username in self.users}
         for exp in self.expenses:
-            balances[exp.paid_by] += exp.total_amount
+            # Тому, хто заплатив, система "викуповує" повну суму
+            if exp.paid_by in balances:
+                balances[exp.paid_by] += exp.total_amount
+            
+            # З усіх учасників (включаючи платника) вираховується їхня частка
             splits = exp.calculate_splits()
             for user, share in splits.items():
                 if user in balances:
                     balances[user] -= share
         return {user: round(bal, 2) for user, bal in balances.items()}
 
-    # --- ВИМОГИ ВІД ВИКЛАДАЧА: ПОШУК, ФІЛЬТРАЦІЯ, СОРТУВАННЯ ---
+    # --- ПОШУК, ФІЛЬТРАЦІЯ, СОРТУВАННЯ ---
     def search_expenses(self, keyword: str) -> List[tuple]:
         """Пошук за ключовим словом в описі. Повертає кортеж (оригінальний_індекс, об'єкт)"""
         return [(i, exp) for i, exp in enumerate(self.expenses) if keyword.lower() in exp.description.lower()]
@@ -269,6 +281,7 @@ class GroupLedger:
         except Exception as e:
             print(f" [Error] Не вдалося експортувати CSV: {e}")
 
+
 # ==========================================
 # 8. КОНСОЛЬНИЙ ІНТЕРФЕЙС (CLI)
 # ==========================================
@@ -288,18 +301,19 @@ def show_menu():
     print("0. Безпечний вихід із програми")
     print("="*50)
 
+
 if __name__ == "__main__":
-    # Завантаження JSON налаштувань (вимога ТЗ)
+    # Завантаження JSON налаштувань
     config = AppConfig()
     config.load_from_json()
-    config.save_to_json() # Перезапис/створення за замовчуванням
+    config.save_to_json() # Перезапис/створення за замовчуванням якщо файлу немає
 
     ledger = GroupLedger(ledger_name="Вінницькі Студенти")
     ledger.load_from_pickle()
     
     print(f"\nВітаємо у трекері! Поточна JSON-тема системи: {config.theme}")
     
-    # Головний життєвий цикл з глобальним перехопленням винятків (try...except)
+    # Головний життєвий цикл з глобальним перехопленням винятків
     while True:
         show_menu()
         try:
@@ -314,11 +328,15 @@ if __name__ == "__main__":
                     
                     print("\nПоточний фінансовий баланс:")
                     for user, bal in ledger.get_balances().items():
-                        status = "(борг)" if bal < 0 else "(йому винні)" if bal > 0 else "(розрахувався)"
+                        if bal < 0:
+                            status = f"(борг: {abs(bal)})"
+                        elif bal > 0:
+                            status = f"(йому винні: {bal})"
+                        else:
+                            status = "(розрахувався повністю)"
                         print(f"  • {user}: {bal} {status}")
                         
                 case "2":
-                    # Використання вимоги про ітератори
                     ledger.display_via_iterator()
                     
                 case "3":
@@ -335,9 +353,9 @@ if __name__ == "__main__":
                 case "4":
                     print("\n--- Створення нової спільної витрати ---")
                     if not ledger.users:
-                        raise ValueError("У групі немає користувачів!")
+                        raise ValueError("У групі немає користувачів для розподілу!")
                         
-                    description = input("Опис витрати: ").strip()
+                    description = input("Опис витрати (наприклад, 'Продукти в Сільпо'): ").strip()
                     total_amount = float(input("Введіть повну суму витрати: "))
                     paid_by = input("Хто сплатив? (username): ").strip()
                     
@@ -347,7 +365,7 @@ if __name__ == "__main__":
                         raise ValueError("Така валюта не підтримується!")
                     currency = Currency(curr_input)
                     
-                    users_input = input("Введіть імена учасників через кому: ")
+                    users_input = input("Введіть імена учасників через кому (наприклад: ivan, petro): ")
                     participants = [u.strip() for u in users_input.split(",") if u.strip()]
                     if not participants:
                         raise ValueError("Список учасників не може бути порожнім!")
@@ -368,7 +386,7 @@ if __name__ == "__main__":
                             percentages[p] = pct
                             total_pct += pct
                         if abs(total_pct - 100.0) > 0.01:
-                            raise ValueError(f"Сума часток дорівнює {total_pct}%, а має бути 100%.")
+                            raise ValueError(f"Сума часток дорівнює {total_pct}%, а має бути рівно 100%.")
                         
                         expense = PercentageSplit(description, total_amount, paid_by, currency, participants, percentages)
                         ledger.add_expense(expense)
@@ -376,35 +394,33 @@ if __name__ == "__main__":
                         print(" [Warning] Невідомий тип розподілу!")
                             
                 case "5":
-                    # ВИМОГА: Пошук та редагування за допомогою контекстного менеджера `with`
                     print("\n--- Пошук та транзакційне редагування ---")
                     keyword = input("Введіть ключове слово для пошуку витрати: ").strip()
                     found = ledger.search_expenses(keyword)
                     
                     if not found:
-                        print("Записів не знайдено.")
+                        print("Записів з таким ключовим словом не знайдено.")
                     else:
                         print("\nЗнайдені записи:")
                         for idx, exp in found:
                             print(f"  ID [{idx}] -> {exp}")
                         
-                        edit_idx_str = input("\nВведіть ID запису, який хочете відредагувати (або Enter для скасування): ").strip()
+                        edit_idx_str = input("\nВведіть ID запису для редагування (або Enter для скасування): ").strip()
                         if edit_idx_str:
                             edit_idx = int(edit_idx_str)
                             
                             # Виклик контекстного менеджера з транзакційністю
                             with ExpenseTransaction(ledger, edit_idx) as exp_to_edit:
                                 print(f"\nРедагуємо запис: {exp_to_edit.description}")
-                                new_desc = input("Введіть новий опис (або Enter щоб залишити поточний): ").strip()
+                                new_desc = input("Введіть новий опис (Enter щоб залишити поточний): ").strip()
                                 if new_desc:
                                     exp_to_edit.description = new_desc
                                     
-                                new_amount_str = input("Введіть нову суму (або Enter щоб залишити поточну): ").strip()
+                                new_amount_str = input("Введіть нову суму (Enter щоб залишити поточну): ").strip()
                                 if new_amount_str:
                                     exp_to_edit.total_amount = float(new_amount_str)
                                     
                 case "6":
-                    # ВИМОГА: Фільтрація даних
                     print("\n--- Фільтрація витрат за платником ---")
                     payer = input("Введіть username платника: ").strip()
                     filtered = ledger.filter_expenses_by_payer(payer)
@@ -415,7 +431,6 @@ if __name__ == "__main__":
                             print(f"  • {exp}")
                             
                 case "7":
-                    # ВИМОГА: Сортування даних
                     print("\n--- Сортування витрат за сумою (від меншої до більшої) ---")
                     sorted_exp = ledger.get_sorted_expenses()
                     if not sorted_exp:
@@ -431,9 +446,9 @@ if __name__ == "__main__":
                     ledger.export_balances_csv()
                     
                 case "0":
-                    print("\n[Вихід] Збереження стану системи...")
+                    print("\n[Вихід] Автоматичне збереження стану системи...")
                     ledger.save_to_pickle()
-                    print("Дякуємо за використання застосунку! Успішної здачі курсової!")
+                    print("Дякуємо за використання застосунку! Успішного захисту курсової!")
                     sys.exit(0)
                     
                 case _:
@@ -441,7 +456,7 @@ if __name__ == "__main__":
                     
         except ValueError as e:
             print(f"\n [Помилка валідації/вводу]: {e}")
-            print("Спробуйте ще раз. Дані не було збережено або транзакцію скасовано.")
+            print("Спробуйте ще раз. Зміни внесено не було.")
         except IndexError as e:
             print(f"\n [Помилка індексу]: {e}")
         except Exception as e:
